@@ -64,6 +64,20 @@ tasks.jar {
     }
 }
 
+tasks.register<Exec>("createInstaller") {
+    group = "distribution"
+    description = "Gera o instalador .deb usando o script shell."
+
+    // Garante que o JAR seja buildado antes de rodar o script
+    dependsOn("jar")
+
+    // Define o diretório de execução como a raiz do projeto
+    workingDir = projectDir
+
+    // Comando para rodar o script
+    commandLine("./scripts/linux/create-installer-using-gradlew.sh")
+}
+
 // Configuração de Publicação (mantida)
 publishing {
     publications {

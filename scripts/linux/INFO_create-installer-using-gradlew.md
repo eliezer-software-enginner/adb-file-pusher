@@ -1,8 +1,15 @@
+
+
+##Forma manual
+
 ./gradlew clean jar
 
 $ ls build/libs/
 
 ./scripts/linux/create-installer-using-gradlew.sh
+
+## Forma automatizada utilizando a task criada lá no gradle
+./gradlew createInstaller
 
 --------------------------------
 Como instalar aplicativos .deb
