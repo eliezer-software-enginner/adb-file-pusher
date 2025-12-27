@@ -33,14 +33,14 @@ public class Main extends Application {
                 .child(new Input(currentFile))
                 .child(new megalodonte.Button("Gerar comando adb", new ButtonProps().onClick(
                         () -> {
-                            String comando = "db push '%s' '/storage/emulated/0/%s".formatted(currentFile.get(), inputPathFolderState.get());
+                            String comando = "db push '%s' '/storage/emulated/0/%s'".formatted(currentFile.get(), inputPathFolderState.get());
                             IO.println(comando);
 
                             Alert a = new Alert(Alert.AlertType.WARNING);
 
                             a.setContentText("Copiou com sucesso");
                             a.setTitle(null);
-                            a.setHeaderText(null);
+                            a.setHeaderText(comando);
                             a.setGraphic(null);
                             a.show();
                         }
