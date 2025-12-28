@@ -1,7 +1,9 @@
-package megalodonte;
+package my_app;
 
 import javafx.application.Platform;
+import javafx.scene.Node;
 import javafx.scene.control.Alert;
+import megalodonte.*;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -9,14 +11,12 @@ import java.io.InputStreamReader;
 import java.nio.file.Files;
 
 public class UI {
-    State<String> folderDestination = new State<>("videos");
-    State<String> currentFile = new State<>("/home/eliezer/1_teste.mp4");
-    State<String> devices = new State<>("");
-
-    State<String> ipPort = new State<>("192.168.3.111:44405");
-    State<String> pairCode = new State<>("378800");
-
-    State<Integer> pushProgress = new State<>(0);
+    static State<String> folderDestination = new State<>("videos");
+    static State<String> currentFile = new State<>("/home/eliezer/1_teste.mp4");
+    static State<String> devices = new State<>("");
+    static State<String> ipPort = new State<>("192.168.3.111:44405");
+    static State<String> pairCode = new State<>("378800");
+    static State<Integer> pushProgress = new State<>(0);
     private volatile boolean pushFinished = false;
 
     public Component render() {
@@ -90,7 +90,6 @@ public class UI {
         });
     }
 
-
     private void push() {
         pushProgress.set(0);
         pushFinished = false;
@@ -148,7 +147,6 @@ public class UI {
             }
         });
     }
-
 
     private void findDevices(){
         devices.set("");
