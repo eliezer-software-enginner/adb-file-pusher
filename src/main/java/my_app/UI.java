@@ -1,54 +1,67 @@
 package my_app;
 
 import javafx.application.Platform;
-import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import megalodonte.*;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.nio.file.Files;
 
 public class UI {
-    static State<String> folderDestination = new State<>("videos");
-    static State<String> currentFile = new State<>("/home/eliezer/1_teste.mp4");
-    static State<String> devices = new State<>("");
-    static State<String> ipPort = new State<>("192.168.3.111:44405");
-    static State<String> pairCode = new State<>("378800");
-    static State<Integer> pushProgress = new State<>(0);
+     State<String> folderDestination = new State<>("videos");
+     State<String> currentFile = new State<>("/home/eliezer/1_teste.mp4");
+     State<String> devices = new State<>("");
+     State<String> ipPort = new State<>("192.168.3.111:44405");
+     State<String> pairCode = new State<>("378800");
+     State<Integer> pushProgress = new State<>(0);
     private volatile boolean pushFinished = false;
 
     public Component render() {
+        final var showProgress =
+                pushProgress.map(v -> v > 0 && v < 100);
+
         return new Column(new ColumnProps().paddingAll(15).spacingOf(20))
                 .child(new Text("ADB Pusher", new TextProps().fontSize(25)))
                 .child(
                         new Row(new RowProps().spacingOf(40))
                                 .child(
-                                        new Column()
-                                                .child(new Button("Find devices", new ButtonProps().onClick(this::findDevices)))
-                                                .child(new Text(devices))
+                                        new Column(new ColumnProps().spacingOf(10))
+                                                .child(ActionButton("Find devices", this::findDevices))
+                                                .child(new Text(devices, new TextProps().fontSize(17)))
                                 ).child(
-                                        new Column()
-                                                .child(new Button("Pair device", new ButtonProps().onClick(this::pairDevice)))
-                                                .child(new Input(ipPort))
-                                                .child(new Input(pairCode))
+                                        new Column(new ColumnProps().spacingOf(10))
+                                                .child(ActionButton("Pair device", this::pairDevice))
+                                                .child(Input_("IP:PORT",ipPort))
+                                                .child(Input_("XXXXXX",pairCode))
                                 ))
                 .child(new SpacerVertical(20))
                 .child(new LineHorizontal())
-                .child(
-                        new Row().child(
-                            new Column()
-                                    .child(new Text("Pasta de destino"))
-                                .child(new Input(folderDestination))
-                        ).child(
-                        new Column().child(new Text("Caminho do arquivo"))
-                                .child(new Input(currentFile)))
-                                .child(new Button("Push to device", new ButtonProps().onClick(this::push)))
-
+                .child(new Row(new RowProps().spacingOf(20))
+                                .child(InputColumn("Destination folder", folderDestination))
+                                .child(InputColumn("File path", currentFile))
+                                .child(ActionButton("Push to device", this::push))
                 )
-                .child(new ProgressBar(pushProgress));
+                .child(Show.when(showProgress, ()-> new ProgressBar(pushProgress)));
+    }
 
+    private Input Input_(String placeholder, State<String> inputState) {
+        return new Input(inputState, new InputProps().fontSize(17).placeHolder(placeholder));
+    }
+
+    private Column InputColumn(String label, State<String> inputState) {
+        return new Column()
+                .child(new Text(label, new TextProps().fontSize(18)))
+                .child(Input_(label, inputState));
+    }
+
+    private Button ActionButton(String text, Runnable callback) {
+        return new Button(text,
+                new ButtonProps()
+                        .onClick(callback::run)
+                        .bgColor("#5D8A9D")
+                        .textColor("white")
+                        .fontSize(20));
     }
 
     private void pairDevice() {
@@ -108,7 +121,7 @@ public class UI {
 
                 try {
                     //Thread.sleep(120); // suavidade
-                    Thread.sleep(180);
+                    Thread.sleep(220);
                 } catch (InterruptedException ignored) {}
             }
         });
@@ -130,9 +143,9 @@ public class UI {
 
                 Platform.runLater(() -> {
                     pushProgress.set(100);
-                    IO.println("✅ Push finalizado");
+                    IO.println("Push finalizado");
                     Alert a = new Alert(Alert.AlertType.WARNING);
-                                a.setContentText("✅ Push finalizado");
+                                a.setContentText("✅ Push finished");
                                 a.setTitle(null);
                                 a.setHeaderText(null);
                                 a.setGraphic(null);
