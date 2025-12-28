@@ -19,12 +19,6 @@ public class UI {
     State<Integer> pushProgress = new State<>(0);
     private volatile boolean pushFinished = false;
 
-    ComputedState<String> pushLabel =
-            ComputedState.of(
-                    () -> "O seu arquivo será copiado para '/storage/emulated/0/" + folderDestination.get(),
-                    folderDestination
-            );
-
     public Component render() {
         return new Column(new ColumnProps().paddingAll(15).spacingOf(20))
                 .child(new Text("ADB Pusher", new TextProps().fontSize(25)))
