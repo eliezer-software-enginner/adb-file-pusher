@@ -2,20 +2,21 @@ package my_app;
 
 import javafx.application.Application;
 import javafx.scene.Scene;
+import javafx.scene.image.Image;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
-import megalodonte.previewer.PreviewRoot;
 import my_app.hotreload.CoesionApp;
 import my_app.hotreload.HotReload;
 
 import java.util.HashSet;
+import java.util.Objects;
 import java.util.Set;
 
 @CoesionApp
 public class Main extends Application {
     public static Stage stage;
     HotReload hotReload;
-    boolean devMode = true;
+    boolean devMode = false;
     static void main(String[] args) {
         launch(args);
     }
@@ -43,12 +44,17 @@ public class Main extends Application {
         }
 
         stage.show();
-
     }
 
     public static void initializeScene(Stage stage) throws Exception {
         stage.setTitle("Adb file pusher");
         stage.setResizable(false);
+
+        final String[] images = {"/logo_32x32.png", "/logo_256x256.png"};
+
+        for (String image : images) {
+            stage.getIcons().add(new Image(Objects.requireNonNull(Main.class.getResourceAsStream(image))));
+        }
 
         final var root = new VBox(new UI().render().getNode());
 

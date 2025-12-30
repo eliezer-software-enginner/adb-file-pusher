@@ -9,11 +9,11 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 
 public class UI {
-     State<String> folderDestination = new State<>("videos");
-     State<String> currentFile = new State<>("/home/eliezer/1_teste.mp4");
+     State<String> folderDestination = new State<>("");
+     State<String> currentFile = new State<>("");
      State<String> devices = new State<>("");
-     State<String> ipPort = new State<>("192.168.3.111:44405");
-     State<String> pairCode = new State<>("378800");
+     State<String> ipPort = new State<>("");
+     State<String> pairCode = new State<>("");
      State<Integer> pushProgress = new State<>(0);
     private volatile boolean pushFinished = false;
 
@@ -94,7 +94,9 @@ public class UI {
 
                 Platform.runLater(() -> {
                     IO.println(output.toString());
-                    devices.set(output.toString());
+                    if(output.toString().contains("Enter pairing code: ")){
+                        devices.set("No device founded");
+                    }else devices.set(output.toString());
                 });
 
             } catch (Exception e) {
