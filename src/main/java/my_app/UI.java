@@ -133,6 +133,32 @@ public class UI {
     }
 
     private void push() {
+        // Validar campos antes de iniciar
+        String filePath = currentFile.get();
+        String destFolder = folderDestination.get();
+        
+        if (filePath == null || filePath.trim().isEmpty()) {
+            Platform.runLater(() -> {
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setContentText("Please select a file to push");
+                alert.setTitle("Error");
+                alert.setHeaderText(null);
+                alert.show();
+            });
+            return;
+        }
+        
+        if (destFolder == null || destFolder.trim().isEmpty()) {
+            Platform.runLater(() -> {
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setContentText("Please enter destination folder");
+                alert.setTitle("Error");
+                alert.setHeaderText(null);
+                alert.show();
+            });
+            return;
+        }
+
         pushProgress.set(0);
         pushFinished = false;
 
@@ -161,31 +187,59 @@ public class UI {
                 ProcessBuilder pb = new ProcessBuilder(
                         "adb",
                         "push",
-                        currentFile.get(),
-                        "/storage/emulated/0/" + folderDestination.get()
+                        filePath.trim(),
+                        "/storage/emulated/0/" + destFolder.trim()
                 );
+                
+                // Redirecionar stderr para capturar erros
+                pb.redirectErrorStream(true);
 
                 Process process = pb.start();
-                process.waitFor();
-
+                
+                // Capturar saída do processo
+                BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream())
+                );
+                
+                StringBuilder output = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    output.append(line).append("\n");
+                }
+                
+                int exitCode = process.waitFor();
                 pushFinished = true;
 
                 Platform.runLater(() -> {
                     pushProgress.set(100);
-                    IO.println("Push finalizado");
-                    Alert a = new Alert(Alert.AlertType.WARNING);
-                                a.setContentText("✅ Push finished");
-                                a.setTitle(null);
-                                a.setHeaderText(null);
-                                a.setGraphic(null);
-                                a.show();
+                    
+                    if (exitCode == 0) {
+                        IO.println("Push finalizado: " + output.toString());
+                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                        alert.setContentText("✅ Push finished successfully!");
+                        alert.setTitle("Success");
+                        alert.setHeaderText(null);
+                        alert.show();
+                    } else {
+                        IO.println("❌ Erro no push: " + output.toString());
+                        Alert alert = new Alert(Alert.AlertType.ERROR);
+                        alert.setContentText("❌ Push failed: " + output.toString());
+                        alert.setTitle("Error");
+                        alert.setHeaderText(null);
+                        alert.show();
+                    }
                 });
 
             } catch (Exception e) {
                 pushFinished = true;
-                Platform.runLater(() ->
-                        IO.println("❌ Erro no push: " + e.getMessage())
-                );
+                Platform.runLater(() -> {
+                    IO.println("❌ Erro no push: " + e.getMessage());
+                    Alert alert = new Alert(Alert.AlertType.ERROR);
+                    alert.setContentText("❌ Error: " + e.getMessage());
+                    alert.setTitle("Error");
+                    alert.setHeaderText(null);
+                    alert.show();
+                });
             }
         });
     }
