@@ -3,6 +3,9 @@ package my_app;
 import javafx.application.Platform;
 import javafx.scene.control.Alert;
 import megalodonte.*;
+import megalodonte.components.*;
+import megalodonte.components.inputs.Input;
+import megalodonte.props.TextProps;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -22,27 +25,27 @@ public class UI {
                 pushProgress.map(v -> v > 0 && v < 100);
 
         return new Column(new ColumnProps().paddingAll(15).spacingOf(20))
-                .child(new Text("ADB Pusher", new TextProps().fontSize(25)))
-                .child(
+                .c_child(new Text("ADB Pusher", new TextProps().fontSize(25)))
+                .c_child(
                         new Row(new RowProps().spacingOf(40))
-                                .child(
+                                .r_child(
                                         new Column(new ColumnProps().spacingOf(10))
-                                                .child(ActionButton("Find devices", this::findDevices))
-                                                .child(new Text(devices, new TextProps().fontSize(17)))
-                                ).child(
+                                                .c_child(ActionButton("Find devices", this::findDevices))
+                                                .c_child(new Text(devices, new TextProps().fontSize(17)))
+                                ).r_child(
                                         new Column(new ColumnProps().spacingOf(10))
-                                                .child(ActionButton("Pair device", this::pairDevice))
-                                                .child(Input_("IP:PORT",ipPort))
-                                                .child(Input_("XXXXXX",pairCode))
+                                                .c_child(ActionButton("Pair device", this::pairDevice))
+                                                .c_child(Input_("IP:PORT",ipPort))
+                                                .c_child(Input_("XXXXXX",pairCode))
                                 ))
-                .child(new SpacerVertical(20))
-                .child(new LineHorizontal())
-                .child(new Row(new RowProps().spacingOf(20))
-                                .child(InputColumn("Destination folder", folderDestination))
-                                .child(InputColumn("File path", currentFile))
-                                .child(ActionButton("Push to device", this::push))
+                .c_child(new SpacerVertical(20))
+                .c_child(new LineHorizontal())
+                .c_child(new Row(new RowProps().spacingOf(20))
+                                .r_child(InputColumn("Destination folder", folderDestination))
+                                .r_child(InputColumn("File path", currentFile))
+                                .r_child(ActionButton("Push to device", this::push))
                 )
-                .child(Show.when(showProgress, ()-> new ProgressBar(pushProgress)));
+                .c_child(Show.when(showProgress, ()-> new ProgressBar(pushProgress)));
     }
 
     private Input Input_(String placeholder, State<String> inputState) {
@@ -51,8 +54,8 @@ public class UI {
 
     private Column InputColumn(String label, State<String> inputState) {
         return new Column()
-                .child(new Text(label, new TextProps().fontSize(18)))
-                .child(Input_(label, inputState));
+                .c_child(new Text(label, new TextProps().fontSize(18)))
+                .c_child(Input_(label, inputState));
     }
 
     private Button ActionButton(String text, Runnable callback) {
