@@ -55,6 +55,9 @@ dependencies {
     implementation("megalodonte:megalodonte-hot-preview:1.0.0")
     //implementation("megalodonte:megalodonte-previewer-components:1.0.0")
 
+    // Apache Commons Net for FTP
+    implementation("commons-net:commons-net:3.9.0")
+
     // Dependências JavaFX removidas (agora gerenciadas pelo bloco 'javafx { ... }')
 }
 

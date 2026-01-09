@@ -14,36 +14,46 @@ import java.io.InputStreamReader;
 public class UI {
      State<String> folderDestination = new State<>("");
      State<String> currentFile = new State<>("");
-     State<String> devices = new State<>("");
-     State<String> ipPort = new State<>("");
-     State<String> pairCode = new State<>("");
+     State<String> ftpStatus = new State<>("");
+     State<String> ftpServer = new State<>("192.168.3.104");
+     State<String> ftpPort = new State<>("2221");
+     State<String> ftpUsername = new State<>("android");
+     State<String> ftpPassword = new State<>("android");
      State<Integer> pushProgress = new State<>(0);
     private volatile boolean pushFinished = false;
+    private FtpService ftpService;
 
     public Component render() {
         final var showProgress =
                 pushProgress.map(v -> v > 0 && v < 100);
 
+        // Initialize FTP service when component renders
+        if (ftpService == null) {
+            updateFtpService();
+        }
+
         return new Column(new ColumnProps().paddingAll(15).spacingOf(20))
-                .c_child(new Text("ADB Pusher", new TextProps().fontSize(25)))
+                .c_child(new Text("FTP File Pusher", new TextProps().fontSize(25)))
                 .c_child(
-                        new Row(new RowProps().spacingOf(40))
-                                .r_child(
-                                        new Column(new ColumnProps().spacingOf(10))
-                                                .c_child(ActionButton("Find devices", this::findDevices))
-                                                .c_child(new Text(devices, new TextProps().fontSize(17)))
-                                ).r_child(
-                                        new Column(new ColumnProps().spacingOf(10))
-                                                .c_child(ActionButton("Pair device", this::pairDevice))
-                                                .c_child(Input_("IP:PORT",ipPort))
-                                                .c_child(Input_("XXXXXX",pairCode))
-                                ))
+                        new Column(new ColumnProps().spacingOf(10))
+                                .c_child(new Text("FTP Configuration", new TextProps().fontSize(18)))
+                                .c_child(new Row(new RowProps().spacingOf(10))
+                                        .r_child(InputColumn("Server", ftpServer))
+                                        .r_child(InputColumn("Port", ftpPort))
+                                )
+                                .c_child(new Row(new RowProps().spacingOf(10))
+                                        .r_child(InputColumn("Username", ftpUsername))
+                                        .r_child(InputColumn("Password", ftpPassword))
+                                )
+                                .c_child(ActionButton("Test Connection", this::testFtpConnection))
+                                .c_child(new Text(ftpStatus, new TextProps().fontSize(15)))
+                )
                 .c_child(new SpacerVertical(20))
                 .c_child(new LineHorizontal())
                 .c_child(new Row(new RowProps().spacingOf(20))
                                 .r_child(InputColumn("Destination folder", folderDestination))
                                 .r_child(InputColumn("File path", currentFile))
-                                .r_child(ActionButton("Push to device", this::push))
+                                .r_child(ActionButton("Upload to FTP", this::push))
                 )
                 .c_child(Show.when(showProgress, ()-> new ProgressBar(pushProgress)));
     }
@@ -67,86 +77,45 @@ public class UI {
                         .fontSize(20));
     }
 
-    private void pairDevice() {
-        System.out.println("[PAIR] Starting pair device operation");
-        String targetIp = ipPort.get();
-        String code = pairCode.get();
+    private void updateFtpService() {
+        String server = ftpServer.get();
+        String portStr = ftpPort.get();
+        String username = ftpUsername.get();
+        String password = ftpPassword.get();
         
-        System.out.println("[PAIR] Target IP: " + targetIp);
-        System.out.println("[PAIR] Pairing code provided: " + (code != null && !code.trim().isEmpty() ? "YES" : "NO"));
-
+        if (server != null && portStr != null && username != null && password != null) {
+            try {
+                int port = Integer.parseInt(portStr.trim());
+                ftpService = new FtpService(server.trim(), port, username.trim(), password.trim());
+                System.out.println("[FTP] Service updated: " + server + ":" + port);
+            } catch (NumberFormatException e) {
+                System.out.println("[FTP] Invalid port number: " + portStr);
+                ftpService = null;
+}
+    }
+}
+    
+    private void testFtpConnection() {
+        System.out.println("[FTP] Testing connection...");
+        updateFtpService();
+        
+        if (ftpService == null) {
+            Platform.runLater(() -> {
+                ftpStatus.set("❌ Invalid FTP configuration");
+            });
+            return;
+        }
+        
         Thread.ofVirtual().start(() -> {
             try {
-                System.out.println("[PAIR] Executing: adb pair " + targetIp);
-                ProcessBuilder pb =
-                        new ProcessBuilder("adb", "pair", targetIp);
-                
-                // Redireciona stderr para stdout para capturar toda a saída
-                pb.redirectErrorStream(true);
-
-                Process process = pb.start();
-                System.out.println("[PAIR] Process started, PID: " + process.pid());
-
-                // 1️⃣ Envia o código de pareamento
-                if (code != null && !code.trim().isEmpty()) {
-                    System.out.println("[PAIR] Sending pairing code: " + code);
-                    process.getOutputStream()
-                            .write((code + "\n").getBytes());
-                    process.getOutputStream().flush();
-                } else {
-                    System.out.println("[PAIR] No pairing code provided, closing output stream");
-                }
-                process.getOutputStream().close();
-
-                // 2️⃣ Lê a resposta
-                BufferedReader reader =
-                        new BufferedReader(
-                                new InputStreamReader(process.getInputStream())
-                        );
-
-                String line;
-                StringBuilder output = new StringBuilder();
-                System.out.println("[PAIR] Reading process output:");
-                
-                while ((line = reader.readLine()) != null) {
-                    output.append(line).append("\n");
-                    System.out.println("[PAIR] OUTPUT: " + line);
-                }
-
-                int exitCode = process.waitFor();
-                System.out.println("[PAIR] Process finished with exit code: " + exitCode);
-                System.out.println("[PAIR] Full output: " + output.toString());
-
+                boolean success = ftpService.testConnection();
                 Platform.runLater(() -> {
-                    IO.println(output.toString());
-                    String result = output.toString();
-                    
-                    // Verifica sucesso primeiro (mesmo que tenha erros de protocolo)
-                    if(result.contains("Successfully paired")) {
-                        System.out.println("[PAIR] ✓ Pairing successful!");
-                        devices.set("Successfully paired!");
-                    } 
-                    // Só considera falha se não tiver sucesso e tiver falha explícita
-                    else if(result.contains("Enter pairing code: ") || result.contains("failed")) {
-                        System.out.println("[PAIR] ✗ Pairing failed");
-                        devices.set("Pairing failed");
-                    } 
-                    // Se tiver erro de protocolo mas não falha explícita, mostra a saída
-                    else if(result.contains("protocol fault")) {
-                        System.out.println("[PAIR] ⚠ Protocol fault detected, but may have succeeded");
-                        devices.set("Pairing completed (check device)");
-                    }
-                    else {
-                        System.out.println("[PAIR] ? Unknown result");
-                        devices.set(result);
-                    }
+                    ftpStatus.set(success ? "✅ Connection successful!" : "❌ Connection failed");
                 });
-
             } catch (Exception e) {
-                System.out.println("[PAIR] ✗ Exception occurred: " + e.getMessage());
-                e.printStackTrace();
+                System.out.println("[FTP] Connection test error: " + e.getMessage());
                 Platform.runLater(() -> {
-                    devices.set("Error: " + e.getMessage());
+                    ftpStatus.set("❌ Error: " + e.getMessage());
                 });
             }
         });
@@ -157,15 +126,15 @@ public class UI {
         String filePath = currentFile.get();
         String destFolder = folderDestination.get();
         
-        System.out.println("[PUSH] Starting push operation");
-        System.out.println("[PUSH] File path: " + (filePath != null ? "'" + filePath + "'" : "null"));
-        System.out.println("[PUSH] Destination folder: " + (destFolder != null ? "'" + destFolder + "'" : "null"));
+        System.out.println("[FTP] Starting upload operation");
+        System.out.println("[FTP] File path: " + (filePath != null ? "'" + filePath + "'" : "null"));
+        System.out.println("[FTP] Destination folder: " + (destFolder != null ? "'" + destFolder + "'" : "null"));
         
         if (filePath == null || filePath.trim().isEmpty()) {
-            System.out.println("[PUSH] ✗ Validation failed: No file selected");
+            System.out.println("[FTP] ✗ Validation failed: No file selected");
             Platform.runLater(() -> {
                 Alert alert = new Alert(Alert.AlertType.ERROR);
-                alert.setContentText("Please select a file to push");
+                alert.setContentText("Please select a file to upload");
                 alert.setTitle("Error");
                 alert.setHeaderText(null);
                 alert.show();
@@ -174,7 +143,7 @@ public class UI {
         }
         
         if (destFolder == null || destFolder.trim().isEmpty()) {
-            System.out.println("[PUSH] ✗ Validation failed: No destination folder");
+            System.out.println("[FTP] ✗ Validation failed: No destination folder");
             Platform.runLater(() -> {
                 Alert alert = new Alert(Alert.AlertType.ERROR);
                 alert.setContentText("Please enter destination folder");
@@ -185,17 +154,31 @@ public class UI {
             return;
         }
 
-        System.out.println("[PUSH] ✓ Validation passed, starting operation");
+        // Verificar configuração FTP
+        updateFtpService();
+        if (ftpService == null) {
+            System.out.println("[FTP] ✗ Validation failed: Invalid FTP configuration");
+            Platform.runLater(() -> {
+                Alert alert = new Alert(Alert.AlertType.ERROR);
+                alert.setContentText("Invalid FTP configuration");
+                alert.setTitle("Error");
+                alert.setHeaderText(null);
+                alert.show();
+            });
+            return;
+        }
+
+        System.out.println("[FTP] ✓ Validation passed, starting upload");
         pushProgress.set(0);
         pushFinished = false;
 
-        // 🔄 Thread do fake progress
+        // 🔄 Thread do progress
         Thread.ofVirtual().start(() -> {
-            System.out.println("[PUSH] Progress thread started");
+            System.out.println("[FTP] Progress thread started");
             int value = 0;
 
             while (!pushFinished && value < 90) {
-                value += 1 + (int)(Math.random() * 3); // avanço irregular
+                value += 1 + (int)(Math.random() * 2); // avanço irregular
                 int safeValue = Math.min(value, 90);
 
                 Platform.runLater(() ->
@@ -203,149 +186,51 @@ public class UI {
                 );
 
                 try {
-                    //Thread.sleep(120); // suavidade
-                    Thread.sleep(220);
+                    Thread.sleep(200);
                 } catch (InterruptedException ignored) {}
             }
-            System.out.println("[PUSH] Progress thread finished");
+            System.out.println("[FTP] Progress thread finished");
         });
 
-        // 🚀 Thread do adb push real
+        // 🚀 Thread do upload FTP real
         Thread.ofVirtual().start(() -> {
             try {
-                String fullDestPath = "/storage/emulated/0/" + destFolder.trim();
-                String command = "adb push \"" + filePath.trim() + "\" \"" + fullDestPath + "\"";
+                System.out.println("[FTP] Starting FTP upload...");
                 
-                System.out.println("[PUSH] Executing: " + command);
-                ProcessBuilder pb = new ProcessBuilder(
-                        "adb",
-                        "push",
-                        filePath.trim(),
-                        fullDestPath
-                );
+                FtpService.FtpResult result = ftpService.uploadFile(filePath.trim(), destFolder.trim());
                 
-                // Redirecionar stderr para capturar erros
-                pb.redirectErrorStream(true);
-
-                Process process = pb.start();
-                System.out.println("[PUSH] Process started, PID: " + process.pid());
-                
-                // Capturar saída do processo
-                BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream())
-                );
-                
-                StringBuilder output = new StringBuilder();
-                String line;
-                int lineCount = 0;
-                
-                System.out.println("[PUSH] Reading process output:");
-                while ((line = reader.readLine()) != null) {
-                    lineCount++;
-                    output.append(line).append("\n");
-                    System.out.println("[PUSH] Line " + lineCount + ": " + line);
-                }
-                
-                int exitCode = process.waitFor();
-                System.out.println("[PUSH] Process finished with exit code: " + exitCode);
-                System.out.println("[PUSH] Total lines read: " + lineCount);
+                System.out.println("[FTP] Upload completed: " + result.toString());
                 pushFinished = true;
 
                 Platform.runLater(() -> {
                     pushProgress.set(100);
                     
-                    if (exitCode == 0) {
-                        System.out.println("[PUSH] ✓ Push successful!");
-                        IO.println("Push finalizado: " + output.toString());
-                        Alert alert = new Alert(Alert.AlertType.INFORMATION);
-                        alert.setContentText("✅ Push finished successfully!");
-                        alert.setTitle("Success");
-                        alert.setHeaderText(null);
-                        alert.show();
+                    Alert alert = new Alert(result.success ? Alert.AlertType.INFORMATION : Alert.AlertType.ERROR);
+                    alert.setContentText(result.toString());
+                    alert.setTitle(result.success ? "Success" : "Error");
+                    alert.setHeaderText(null);
+                    alert.show();
+                    
+                    if (result.success) {
+                        ftpStatus.set("✅ Last upload successful");
                     } else {
-                        System.out.println("[PUSH] ✗ Push failed with exit code: " + exitCode);
-                        IO.println("❌ Erro no push: " + output.toString());
-                        Alert alert = new Alert(Alert.AlertType.ERROR);
-                        alert.setContentText("❌ Push failed: " + output.toString());
-                        alert.setTitle("Error");
-                        alert.setHeaderText(null);
-                        alert.show();
+                        ftpStatus.set("❌ Last upload failed");
                     }
                 });
 
             } catch (Exception e) {
-                System.out.println("[PUSH] ✗ Exception occurred: " + e.getMessage());
+                System.out.println("[FTP] ✗ Exception occurred: " + e.getMessage());
                 e.printStackTrace();
                 pushFinished = true;
                 Platform.runLater(() -> {
-                    IO.println("❌ Erro no push: " + e.getMessage());
                     Alert alert = new Alert(Alert.AlertType.ERROR);
-                    alert.setContentText("❌ Error: " + e.getMessage());
+                    alert.setContentText("❌ Upload error: " + e.getMessage());
                     alert.setTitle("Error");
                     alert.setHeaderText(null);
                     alert.show();
-                });
-            }
-        });
-    }
-
-    private void findDevices(){
-        devices.set("");
-        System.out.println("[DEVICES] Starting find devices operation");
-
-        Thread.ofVirtual().start(()->{
-            try {
-                System.out.println("[DEVICES] Executing: adb devices");
-                ProcessBuilder pb = new ProcessBuilder("adb", "devices");
-                var process = pb.start();
-                System.out.println("[DEVICES] Process started, PID: " + process.pid());
-
-                BufferedReader reader =
-                        new BufferedReader(new InputStreamReader(process.getInputStream()));
-
-                String line;
-                StringBuilder sb = new StringBuilder();
-                final boolean[] hasDevice = {false};
-                int lineCount = 0;
-                
-                System.out.println("[DEVICES] Reading process output:");
-                while ((line = reader.readLine()) != null) {
-                    lineCount++;
-                    if (line.isBlank()) {
-                        System.out.println("[DEVICES] Line " + lineCount + ": [blank]");
-                        continue;
-                    }
-                    sb.append(line).append("\n");
-                    System.out.println("[DEVICES] Line " + lineCount + ": " + line);
                     
-                    // Verifica se há dispositivo (linha que não seja o cabeçalho "List of devices")
-                    if (!line.startsWith("List of devices") && !line.trim().isEmpty()) {
-                        hasDevice[0] = true;
-                        System.out.println("[DEVICES] ✓ Device found on line " + lineCount);
-                    }
-                }
-
-                int exitCode = process.waitFor();
-                System.out.println("[DEVICES] Process finished with exit code: " + exitCode);
-                System.out.println("[DEVICES] Total lines read: " + lineCount);
-                System.out.println("[DEVICES] Has devices: " + hasDevice[0]);
-                IO.println("lines: " + sb.toString());
-
-                Platform.runLater(() ->{
-                    IO.println(sb.toString());
-                    if (!hasDevice[0]) {
-                        System.out.println("[DEVICES] → No devices found");
-                        devices.set("No devices");
-                    } else {
-                        System.out.println("[DEVICES] → Devices found");
-                        devices.set(sb.toString());
-                    }
+                    ftpStatus.set("❌ Upload error: " + e.getMessage());
                 });
-
-            } catch (IOException | InterruptedException e) {
-                System.out.println("[DEVICES] ✗ Exception occurred: " + e.getMessage());
-                e.printStackTrace();
-                throw new RuntimeException(e);
             }
         });
     }
