@@ -109,6 +109,12 @@ This is a JavaFX desktop application for ADB file pushing with hot reload capabi
 - Excludes core classes to prevent instability
 - Requires proper module visibility configuration
 
+### Agent Workflow Rules
+- **Always run build** after making code changes: `./gradlew build`
+- **Always commit changes** after successful build with descriptive commit message
+- Use conventional commit format: `type: description`
+- Types: `fix`, `feat`, `refactor`, `docs`, `style`, `test`, `chore`
+
 ### ADB Command Patterns
 - All ADB commands run in virtual threads
 - Use `BufferedReader` for process output
