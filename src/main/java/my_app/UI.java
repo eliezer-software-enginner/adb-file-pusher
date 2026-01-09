@@ -5,11 +5,13 @@ import javafx.scene.control.Alert;
 import megalodonte.*;
 import megalodonte.components.*;
 import megalodonte.components.inputs.Input;
+import megalodonte.components.inputs.TextAreaInput;
 import megalodonte.props.TextProps;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.Arrays;
 
 public class UI {
      State<String> folderDestination = new State<>("");
@@ -20,6 +22,7 @@ public class UI {
      State<String> ftpUsername = new State<>("android");
      State<String> ftpPassword = new State<>("android");
      State<Integer> pushProgress = new State<>(0);
+     State<String> uploadResults = new State<>("");
     private volatile boolean pushFinished = false;
     private FtpService ftpService;
 
@@ -50,16 +53,39 @@ public class UI {
                 )
                 .c_child(new SpacerVertical(20))
                 .c_child(new LineHorizontal())
-                .c_child(new Row(new RowProps().spacingOf(20))
-                                .r_child(InputColumn("Destination folder", folderDestination))
-                                .r_child(InputColumn("File path", currentFile))
-                                .r_child(ActionButton("Upload to FTP", this::push))
+                .c_child(
+                        new Column(new ColumnProps().spacingOf(10))
+                                .c_child(new Text("Files to Upload", new TextProps().fontSize(18)))
+                                .c_child(TextAreaInput_("One file path per line", currentFile))
+                                .c_child(new Text("Files found: " + getFileCount(), new TextProps().fontSize(14)))
                 )
-                .c_child(Show.when(showProgress, ()-> new ProgressBar(pushProgress)));
+                .c_child(InputColumn("Destination folder", folderDestination))
+                .c_child(ActionButton("Upload to FTP", this::push))
+                .c_child(Show.when(showProgress, () -> new ProgressBar(pushProgress)))
+                .c_child(new LineHorizontal())
+                .c_child(
+                        new Column(new ColumnProps().spacingOf(5))
+                                .c_child(new Text("Upload Results", new TextProps().fontSize(16)))
+                                .c_child(TextAreaInput_("Results will appear here...", uploadResults))
+                );
     }
 
     private Input Input_(String placeholder, State<String> inputState) {
         return new Input(inputState, new InputProps().fontSize(17).placeHolder(placeholder));
+    }
+    
+    private TextAreaInput TextAreaInput_(String placeholder, State<String> inputState) {
+        return new TextAreaInput(inputState, new InputProps().fontSize(14).placeHolder(placeholder));
+    }
+    
+    private int getFileCount() {
+        String files = currentFile.get();
+        if (files == null || files.trim().isEmpty()) return 0;
+        
+        String[] lines = files.split("\n");
+        return (int) Arrays.stream(lines)
+                .filter(line -> line != null && !line.trim().isEmpty())
+                .count();
     }
 
     private Column InputColumn(String label, State<String> inputState) {
@@ -123,18 +149,21 @@ public class UI {
 
     private void push() {
         // Validar campos antes de iniciar
-        String filePath = currentFile.get();
+        String filesText = currentFile.get();
         String destFolder = folderDestination.get();
         
-        System.out.println("[FTP] Starting upload operation");
-        System.out.println("[FTP] File path: " + (filePath != null ? "'" + filePath + "'" : "null"));
+        // Extrair lista de arquivos
+        String[] filePaths = extractFilePaths(filesText);
+        
+        System.out.println("[FTP] Starting batch upload operation");
+        System.out.println("[FTP] Files count: " + filePaths.length);
         System.out.println("[FTP] Destination folder: " + (destFolder != null ? "'" + destFolder + "'" : "null"));
         
-        if (filePath == null || filePath.trim().isEmpty()) {
-            System.out.println("[FTP] ✗ Validation failed: No file selected");
+        if (filePaths.length == 0) {
+            System.out.println("[FTP] ✗ Validation failed: No files found");
             Platform.runLater(() -> {
                 Alert alert = new Alert(Alert.AlertType.ERROR);
-                alert.setContentText("Please select a file to upload");
+                alert.setContentText("Please enter at least one file path");
                 alert.setTitle("Error");
                 alert.setHeaderText(null);
                 alert.show();
@@ -168,70 +197,97 @@ public class UI {
             return;
         }
 
-        System.out.println("[FTP] ✓ Validation passed, starting upload");
+        System.out.println("[FTP] ✓ Validation passed, starting batch upload");
         pushProgress.set(0);
         pushFinished = false;
+        uploadResults.set("");
 
-        // 🔄 Thread do progress
+        // 🚀 Thread do upload em lote
         Thread.ofVirtual().start(() -> {
-            System.out.println("[FTP] Progress thread started");
-            int value = 0;
-
-            while (!pushFinished && value < 90) {
-                value += 1 + (int)(Math.random() * 2); // avanço irregular
-                int safeValue = Math.min(value, 90);
-
-                Platform.runLater(() ->
-                        pushProgress.set(safeValue)
-                );
-
+StringBuilder results = new StringBuilder();
+        final int[] successCount = {0};
+        final int totalFiles = filePaths.length;
+            
+            for (int i = 0; i < totalFiles; i++) {
+                String filePath = filePaths[i].trim();
+                String fileName = new java.io.File(filePath).getName();
+                
+                System.out.println("[FTP] Uploading file " + (i + 1) + "/" + totalFiles + ": " + fileName);
+                
                 try {
-                    Thread.sleep(200);
-                } catch (InterruptedException ignored) {}
-            }
-            System.out.println("[FTP] Progress thread finished");
-        });
-
-        // 🚀 Thread do upload FTP real
-        Thread.ofVirtual().start(() -> {
-            try {
-                System.out.println("[FTP] Starting FTP upload...");
-                
-                FtpService.FtpResult result = ftpService.uploadFile(filePath.trim(), destFolder.trim());
-                
-                System.out.println("[FTP] Upload completed: " + result.toString());
-                pushFinished = true;
-
-                Platform.runLater(() -> {
-                    pushProgress.set(100);
+                    FtpService.FtpResult result = ftpService.uploadFile(filePath, destFolder.trim());
                     
-                    Alert alert = new Alert(result.success ? Alert.AlertType.INFORMATION : Alert.AlertType.ERROR);
-                    alert.setContentText(result.toString());
-                    alert.setTitle(result.success ? "Success" : "Error");
-                    alert.setHeaderText(null);
-                    alert.show();
+                    // Atualizar progress
+                    int progress = (int) ((i + 1.0) / totalFiles * 100);
+                    Platform.runLater(() -> pushProgress.set(progress));
+                    
+                    // Adicionar resultado
+                    String resultText = String.format("%d. %s: %s%n", 
+                        (i + 1), fileName, result.toString());
+                    results.append(resultText);
+                    
+                    Platform.runLater(() -> {
+                        uploadResults.set(results.toString());
+                    });
                     
                     if (result.success) {
-                        ftpStatus.set("✅ Last upload successful");
+                        successCount[0]++;
+                        System.out.println("[FTP] ✓ Upload successful: " + fileName);
                     } else {
-                        ftpStatus.set("❌ Last upload failed");
+                        System.out.println("[FTP] ✗ Upload failed: " + fileName + " - " + result.message);
                     }
-                });
-
-            } catch (Exception e) {
-                System.out.println("[FTP] ✗ Exception occurred: " + e.getMessage());
-                e.printStackTrace();
-                pushFinished = true;
-                Platform.runLater(() -> {
-                    Alert alert = new Alert(Alert.AlertType.ERROR);
-                    alert.setContentText("❌ Upload error: " + e.getMessage());
-                    alert.setTitle("Error");
-                    alert.setHeaderText(null);
-                    alert.show();
                     
-                    ftpStatus.set("❌ Upload error: " + e.getMessage());
-                });
+                } catch (Exception e) {
+                    System.out.println("[FTP] ✗ Exception uploading " + fileName + ": " + e.getMessage());
+                    String errorText = String.format("%d. %s: ❌ Error: %s%n", 
+                        (i + 1), fileName, e.getMessage());
+                    results.append(errorText);
+                    
+                    Platform.runLater(() -> {
+                        uploadResults.set(results.toString());
+                    });
+                }
             }
+            
+            pushFinished = true;
+            Platform.runLater(() -> {
+                pushProgress.set(100);
+                
+                // Resumo final
+                String summary = String.format("%n=== Upload Summary ===%n" +
+                    "Total files: %d%n" +
+                    "Successful: %d%n" +
+                    "Failed: %d%n", 
+                    totalFiles, successCount[0], totalFiles - successCount[0]);
+                results.append(summary);
+                uploadResults.set(results.toString());
+                
+                // Alert com resumo
+                Alert alert = new Alert(successCount[0] == totalFiles ? Alert.AlertType.INFORMATION : Alert.AlertType.WARNING);
+                alert.setContentText(String.format("Upload completed! %d/%d files successful", successCount[0], totalFiles));
+                alert.setTitle("Batch Upload Complete");
+                alert.setHeaderText(null);
+                alert.show();
+                
+                if (successCount[0] == totalFiles) {
+                    ftpStatus.set("✅ All files uploaded successfully");
+                } else if (successCount[0] > 0) {
+                    ftpStatus.set("⚠️ " + successCount[0] + "/" + totalFiles + " files uploaded");
+                } else {
+                    ftpStatus.set("❌ All uploads failed");
+                }
+            });
         });
+    }
+    
+    private String[] extractFilePaths(String filesText) {
+        if (filesText == null || filesText.trim().isEmpty()) {
+            return new String[0];
+        }
+        
+        return Arrays.stream(filesText.split("\n"))
+                .map(String::trim)
+                .filter(line -> !line.isEmpty())
+                .toArray(String[]::new);
     }
 }
