@@ -106,11 +106,20 @@ public class UI {
                 Platform.runLater(() -> {
                     IO.println(output.toString());
                     String result = output.toString();
-                    if(result.contains("Enter pairing code: ") || result.contains("failed")){
-                        devices.set("Pairing failed");
-                    } else if(result.contains("Successfully paired")) {
+                    
+                    // Verifica sucesso primeiro (mesmo que tenha erros de protocolo)
+                    if(result.contains("Successfully paired")) {
                         devices.set("Successfully paired!");
-                    } else {
+                    } 
+                    // Só considera falha se não tiver sucesso e tiver falha explícita
+                    else if(result.contains("Enter pairing code: ") || result.contains("failed")) {
+                        devices.set("Pairing failed");
+                    } 
+                    // Se tiver erro de protocolo mas não falha explícita, mostra a saída
+                    else if(result.contains("protocol fault")) {
+                        devices.set("Pairing completed (check device)");
+                    }
+                    else {
                         devices.set(result);
                     }
                 });
