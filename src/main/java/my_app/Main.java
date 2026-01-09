@@ -58,7 +58,7 @@ public class Main extends Application {
 
         final var root = new VBox(new UI().render().getNode());
 
-        stage.setScene(new Scene(root, 700, 500));
+        stage.setScene(new Scene(root, 800, 650));
         System.out.println("[App] Scene re-initialized.");
     }
 }
