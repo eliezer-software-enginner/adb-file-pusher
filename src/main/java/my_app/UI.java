@@ -68,24 +68,33 @@ public class UI {
     }
 
     private void pairDevice() {
-        System.out.println("pairDevice()");
+        System.out.println("[PAIR] Starting pair device operation");
+        String targetIp = ipPort.get();
+        String code = pairCode.get();
+        
+        System.out.println("[PAIR] Target IP: " + targetIp);
+        System.out.println("[PAIR] Pairing code provided: " + (code != null && !code.trim().isEmpty() ? "YES" : "NO"));
 
         Thread.ofVirtual().start(() -> {
             try {
+                System.out.println("[PAIR] Executing: adb pair " + targetIp);
                 ProcessBuilder pb =
-                        new ProcessBuilder("adb", "pair", ipPort.get());
+                        new ProcessBuilder("adb", "pair", targetIp);
                 
                 // Redireciona stderr para stdout para capturar toda a saída
                 pb.redirectErrorStream(true);
 
                 Process process = pb.start();
+                System.out.println("[PAIR] Process started, PID: " + process.pid());
 
                 // 1️⃣ Envia o código de pareamento
-                String code = pairCode.get();
                 if (code != null && !code.trim().isEmpty()) {
+                    System.out.println("[PAIR] Sending pairing code: " + code);
                     process.getOutputStream()
                             .write((code + "\n").getBytes());
                     process.getOutputStream().flush();
+                } else {
+                    System.out.println("[PAIR] No pairing code provided, closing output stream");
                 }
                 process.getOutputStream().close();
 
@@ -97,11 +106,16 @@ public class UI {
 
                 String line;
                 StringBuilder output = new StringBuilder();
+                System.out.println("[PAIR] Reading process output:");
+                
                 while ((line = reader.readLine()) != null) {
                     output.append(line).append("\n");
+                    System.out.println("[PAIR] OUTPUT: " + line);
                 }
 
-                process.waitFor();
+                int exitCode = process.waitFor();
+                System.out.println("[PAIR] Process finished with exit code: " + exitCode);
+                System.out.println("[PAIR] Full output: " + output.toString());
 
                 Platform.runLater(() -> {
                     IO.println(output.toString());
@@ -109,22 +123,28 @@ public class UI {
                     
                     // Verifica sucesso primeiro (mesmo que tenha erros de protocolo)
                     if(result.contains("Successfully paired")) {
+                        System.out.println("[PAIR] ✓ Pairing successful!");
                         devices.set("Successfully paired!");
                     } 
                     // Só considera falha se não tiver sucesso e tiver falha explícita
                     else if(result.contains("Enter pairing code: ") || result.contains("failed")) {
+                        System.out.println("[PAIR] ✗ Pairing failed");
                         devices.set("Pairing failed");
                     } 
                     // Se tiver erro de protocolo mas não falha explícita, mostra a saída
                     else if(result.contains("protocol fault")) {
+                        System.out.println("[PAIR] ⚠ Protocol fault detected, but may have succeeded");
                         devices.set("Pairing completed (check device)");
                     }
                     else {
+                        System.out.println("[PAIR] ? Unknown result");
                         devices.set(result);
                     }
                 });
 
             } catch (Exception e) {
+                System.out.println("[PAIR] ✗ Exception occurred: " + e.getMessage());
+                e.printStackTrace();
                 Platform.runLater(() -> {
                     devices.set("Error: " + e.getMessage());
                 });
@@ -137,7 +157,12 @@ public class UI {
         String filePath = currentFile.get();
         String destFolder = folderDestination.get();
         
+        System.out.println("[PUSH] Starting push operation");
+        System.out.println("[PUSH] File path: " + (filePath != null ? "'" + filePath + "'" : "null"));
+        System.out.println("[PUSH] Destination folder: " + (destFolder != null ? "'" + destFolder + "'" : "null"));
+        
         if (filePath == null || filePath.trim().isEmpty()) {
+            System.out.println("[PUSH] ✗ Validation failed: No file selected");
             Platform.runLater(() -> {
                 Alert alert = new Alert(Alert.AlertType.ERROR);
                 alert.setContentText("Please select a file to push");
@@ -149,6 +174,7 @@ public class UI {
         }
         
         if (destFolder == null || destFolder.trim().isEmpty()) {
+            System.out.println("[PUSH] ✗ Validation failed: No destination folder");
             Platform.runLater(() -> {
                 Alert alert = new Alert(Alert.AlertType.ERROR);
                 alert.setContentText("Please enter destination folder");
@@ -159,11 +185,13 @@ public class UI {
             return;
         }
 
+        System.out.println("[PUSH] ✓ Validation passed, starting operation");
         pushProgress.set(0);
         pushFinished = false;
 
         // 🔄 Thread do fake progress
         Thread.ofVirtual().start(() -> {
+            System.out.println("[PUSH] Progress thread started");
             int value = 0;
 
             while (!pushFinished && value < 90) {
@@ -179,22 +207,28 @@ public class UI {
                     Thread.sleep(220);
                 } catch (InterruptedException ignored) {}
             }
+            System.out.println("[PUSH] Progress thread finished");
         });
 
         // 🚀 Thread do adb push real
         Thread.ofVirtual().start(() -> {
             try {
+                String fullDestPath = "/storage/emulated/0/" + destFolder.trim();
+                String command = "adb push \"" + filePath.trim() + "\" \"" + fullDestPath + "\"";
+                
+                System.out.println("[PUSH] Executing: " + command);
                 ProcessBuilder pb = new ProcessBuilder(
                         "adb",
                         "push",
                         filePath.trim(),
-                        "/storage/emulated/0/" + destFolder.trim()
+                        fullDestPath
                 );
                 
                 // Redirecionar stderr para capturar erros
                 pb.redirectErrorStream(true);
 
                 Process process = pb.start();
+                System.out.println("[PUSH] Process started, PID: " + process.pid());
                 
                 // Capturar saída do processo
                 BufferedReader reader = new BufferedReader(
@@ -203,17 +237,25 @@ public class UI {
                 
                 StringBuilder output = new StringBuilder();
                 String line;
+                int lineCount = 0;
+                
+                System.out.println("[PUSH] Reading process output:");
                 while ((line = reader.readLine()) != null) {
+                    lineCount++;
                     output.append(line).append("\n");
+                    System.out.println("[PUSH] Line " + lineCount + ": " + line);
                 }
                 
                 int exitCode = process.waitFor();
+                System.out.println("[PUSH] Process finished with exit code: " + exitCode);
+                System.out.println("[PUSH] Total lines read: " + lineCount);
                 pushFinished = true;
 
                 Platform.runLater(() -> {
                     pushProgress.set(100);
                     
                     if (exitCode == 0) {
+                        System.out.println("[PUSH] ✓ Push successful!");
                         IO.println("Push finalizado: " + output.toString());
                         Alert alert = new Alert(Alert.AlertType.INFORMATION);
                         alert.setContentText("✅ Push finished successfully!");
@@ -221,6 +263,7 @@ public class UI {
                         alert.setHeaderText(null);
                         alert.show();
                     } else {
+                        System.out.println("[PUSH] ✗ Push failed with exit code: " + exitCode);
                         IO.println("❌ Erro no push: " + output.toString());
                         Alert alert = new Alert(Alert.AlertType.ERROR);
                         alert.setContentText("❌ Push failed: " + output.toString());
@@ -231,6 +274,8 @@ public class UI {
                 });
 
             } catch (Exception e) {
+                System.out.println("[PUSH] ✗ Exception occurred: " + e.getMessage());
+                e.printStackTrace();
                 pushFinished = true;
                 Platform.runLater(() -> {
                     IO.println("❌ Erro no push: " + e.getMessage());
@@ -246,13 +291,14 @@ public class UI {
 
     private void findDevices(){
         devices.set("");
-
-        System.out.println("find devices()");
+        System.out.println("[DEVICES] Starting find devices operation");
 
         Thread.ofVirtual().start(()->{
-            ProcessBuilder pb = new ProcessBuilder("adb", "devices");
             try {
+                System.out.println("[DEVICES] Executing: adb devices");
+                ProcessBuilder pb = new ProcessBuilder("adb", "devices");
                 var process = pb.start();
+                System.out.println("[DEVICES] Process started, PID: " + process.pid());
 
                 BufferedReader reader =
                         new BufferedReader(new InputStreamReader(process.getInputStream()));
@@ -260,31 +306,45 @@ public class UI {
                 String line;
                 StringBuilder sb = new StringBuilder();
                 final boolean[] hasDevice = {false};
+                int lineCount = 0;
                 
+                System.out.println("[DEVICES] Reading process output:");
                 while ((line = reader.readLine()) != null) {
-                    if (line.isBlank()) continue;
+                    lineCount++;
+                    if (line.isBlank()) {
+                        System.out.println("[DEVICES] Line " + lineCount + ": [blank]");
+                        continue;
+                    }
                     sb.append(line).append("\n");
+                    System.out.println("[DEVICES] Line " + lineCount + ": " + line);
                     
                     // Verifica se há dispositivo (linha que não seja o cabeçalho "List of devices")
                     if (!line.startsWith("List of devices") && !line.trim().isEmpty()) {
                         hasDevice[0] = true;
+                        System.out.println("[DEVICES] ✓ Device found on line " + lineCount);
                     }
                 }
 
+                int exitCode = process.waitFor();
+                System.out.println("[DEVICES] Process finished with exit code: " + exitCode);
+                System.out.println("[DEVICES] Total lines read: " + lineCount);
+                System.out.println("[DEVICES] Has devices: " + hasDevice[0]);
                 IO.println("lines: " + sb.toString());
-
-                process.waitFor();
 
                 Platform.runLater(() ->{
                     IO.println(sb.toString());
                     if (!hasDevice[0]) {
+                        System.out.println("[DEVICES] → No devices found");
                         devices.set("No devices");
                     } else {
+                        System.out.println("[DEVICES] → Devices found");
                         devices.set(sb.toString());
                     }
                 });
 
             } catch (IOException | InterruptedException e) {
+                System.out.println("[DEVICES] ✗ Exception occurred: " + e.getMessage());
+                e.printStackTrace();
                 throw new RuntimeException(e);
             }
         });
