@@ -61,24 +61,32 @@ public class UI {
     private Button ActionButton(String text, Runnable callback) {
         return new Button(text,
                 new ButtonProps()
-                        .onClick(callback::run)
+                        .onClick(callback)
                         .bgColor("#5D8A9D")
                         .textColor("white")
                         .fontSize(20));
     }
 
     private void pairDevice() {
+        System.out.println("pairDevice()");
+
         Thread.ofVirtual().start(() -> {
             try {
                 ProcessBuilder pb =
                         new ProcessBuilder("adb", "pair", ipPort.get());
+                
+                // Redireciona stderr para stdout para capturar toda a saída
+                pb.redirectErrorStream(true);
 
                 Process process = pb.start();
 
                 // 1️⃣ Envia o código de pareamento
-                process.getOutputStream()
-                        .write((pairCode.get() + "\n").getBytes());
-                process.getOutputStream().flush();
+                String code = pairCode.get();
+                if (code != null && !code.trim().isEmpty()) {
+                    process.getOutputStream()
+                            .write((code + "\n").getBytes());
+                    process.getOutputStream().flush();
+                }
                 process.getOutputStream().close();
 
                 // 2️⃣ Lê a resposta
@@ -97,13 +105,20 @@ public class UI {
 
                 Platform.runLater(() -> {
                     IO.println(output.toString());
-                    if(output.toString().contains("Enter pairing code: ")){
-                        devices.set("No device founded");
-                    }else devices.set(output.toString());
+                    String result = output.toString();
+                    if(result.contains("Enter pairing code: ") || result.contains("failed")){
+                        devices.set("Pairing failed");
+                    } else if(result.contains("Successfully paired")) {
+                        devices.set("Successfully paired!");
+                    } else {
+                        devices.set(result);
+                    }
                 });
 
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                Platform.runLater(() -> {
+                    devices.set("Error: " + e.getMessage());
+                });
             }
         });
     }
@@ -169,6 +184,8 @@ public class UI {
     private void findDevices(){
         devices.set("");
 
+        System.out.println("find devices()");
+
         Thread.ofVirtual().start(()->{
             ProcessBuilder pb = new ProcessBuilder("adb", "devices");
             try {
@@ -179,16 +196,29 @@ public class UI {
 
                 String line;
                 StringBuilder sb = new StringBuilder();
+                final boolean[] hasDevice = {false};
+                
                 while ((line = reader.readLine()) != null) {
-                    if (line.isBlank()) continue; // 👈 aqui resolve
+                    if (line.isBlank()) continue;
                     sb.append(line).append("\n");
+                    
+                    // Verifica se há dispositivo (linha que não seja o cabeçalho "List of devices")
+                    if (!line.startsWith("List of devices") && !line.trim().isEmpty()) {
+                        hasDevice[0] = true;
+                    }
                 }
+
+                IO.println("lines: " + sb.toString());
 
                 process.waitFor();
 
                 Platform.runLater(() ->{
                     IO.println(sb.toString());
-                    devices.set(sb.toString());
+                    if (!hasDevice[0]) {
+                        devices.set("No devices");
+                    } else {
+                        devices.set(sb.toString());
+                    }
                 });
 
             } catch (IOException | InterruptedException e) {
